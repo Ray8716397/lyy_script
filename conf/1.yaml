@@ -96,10 +96,10 @@ dns:
   - https://doh.pub:443/dns-query
   - https://dns.alidns.com:443/dns-query
   use-hosts: false
-external-controller: :10001
+external-controller: :7892
 log-level: info
 mode: Rule
-port: 9999
+port: 7890
 proxies:
 - cipher: aes-128-gcm
   name: 当前流量:397.53G / 500.00G
@@ -11990,4 +11990,4 @@ sniffer:
       override-destination: true
       ports:
       - 1-65535
-socks-port: 10000
+socks-port: 7891

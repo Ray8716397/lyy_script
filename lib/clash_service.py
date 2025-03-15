@@ -1,9 +1,12 @@
+import atexit
 import copy
 import itertools
 import os
 import random
+import signal
 import socket
 import subprocess
+import sys
 import traceback
 from urllib.parse import urlencode, quote
 import yaml
@@ -12,8 +15,9 @@ import requests
 SUBSCRIBE_URL = "https://api.immtel.co/?L1N1YnNjcmlwdGlvbi9DbGFzaD9zaWQ9MTA0NjgmdG9rZW49ZnZJZ0dIdHpXdnEmbW09MjA1NTQmNjcyNmExMTk2"
 CLASH_BIN = "/home/ray/Downloads/clash_2.0.24_linux_amd64/clash"
 
+
 try:
-    conf_dir = "conf"
+    conf_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "conf")
     conf_fp1 = os.path.join(conf_dir, "1.yaml")
     if not os.path.exists(conf_fp1):
         os.makedirs(conf_dir, exist_ok=True)
@@ -57,7 +61,50 @@ class ClashService:
         cmd = [CLASH_BIN, "-f", conf_fp]
 
         # 后台启动 clash 服务
-        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.process = subprocess.Popen(cmd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE,
+                                        text=True,  # 以文本模式读取输出
+                                        bufsize=1,  # 行缓冲模式
+                                        )
+
+        def cleanup():
+            if self.process.poll() is None:
+                self.process.kill()
+                self.process.wait()
+
+        def handle_signal(sig, frame):
+            cleanup()
+            sys.exit(0)
+
+        atexit.register(cleanup)
+        signal.signal(signal.SIGINT, handle_signal)
+        signal.signal(signal.SIGTERM, handle_signal)
+
+        target_string = "RESTful API listening at:"
+        found = False
+
+        # 循环读取stdout输出
+        while True:
+            # 逐行读取stdout
+            line = self.process.stdout.readline()
+            if line:
+                print(line.strip())  # 可选：实时打印输出
+                if target_string in line:
+                    found = True
+                    break
+            else:
+                # 检查子进程是否已退出
+                if self.process.poll() is not None:
+                    break
+
+        # 检查是否找到目标字符串
+        if not found:
+            # 处理未找到的情况（如超时或进程异常退出）
+            error = self.process.stderr.read()
+            raise RuntimeError(f"目标字符串未找到，进程可能已失败：\n{error}")
+
+        self.http_proxy = f'http://127.0.0.1:{str(self.port)}'
         print(f"Clash {index} 启动成功")
 
 
@@ -66,8 +113,9 @@ class ClashService:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             for port in itertools.count(self.port_offset):
                 try:
-                    s.bind(('', port))
                     self.port_offset += 1
+                    s.bind(('', port))
+
                     return port
                 except OSError:
                     continue

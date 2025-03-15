@@ -1,3 +1,4 @@
 pyyaml
 beautifulsoup
 pytest-playwright
+discord.py
